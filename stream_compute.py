@@ -1,6 +1,7 @@
 # ~/spark-2.3.3-bin-hadoop2.7/bin/spark-submit stream_compute.py localhost 9999
 # bin/kafka-console-producer.sh --topic my-stream --broker-list 127.0.0.1:9092
 # nc -lk 9999
+# new branch goals-100
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import explode
