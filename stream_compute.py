@@ -11,7 +11,7 @@ from pyspark.streaming.kafka import KafkaUtils
 spark = SparkSession \
     .builder \
     .appName("StructuredNetworkWordCount") \
-    .config("spark.jars", "/home/neeraj/Downloads/_jar/kafka-clients-0.10.0.2.jar,/home/neeraj/Downloads/_jar/spark-sql-kafka-0-10_2.11-2.3.3.jar") \
+    .config("spark.jars", "/home/neeraj/kafka_2.11-2.3.0/libs/kafka-clients-2.3.0.jar,/home/neeraj/Downloads/_jar/spark-sql-kafka-0-10_2.11-2.3.3.jar") \
     .getOrCreate()
 
 
