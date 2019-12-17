@@ -2,7 +2,7 @@
 # bin/kafka-console-producer.sh --topic my-stream --broker-list 127.0.0.1:9092
 # nc -lk 9999
 # new branch goals-100
-# ~/spark-2.3.3-bin-hadoop2.7/bin/spark-submit --conf "spark.executor.extraJavaOptions=-verbose:class"  --conf "spark.driver.extraJavaOptions=-verbose:class" --jars /extlib/spark-sql-kafka-0-10_2.11-2.1.0.cloudera1.jar,/extlib/kafka-clients-0.8.2.1.jar,~/extlib/spark-sql-kafka-0-10_2.11-2.1.0.cloudera1.jar,~/extlib/kafka-clients-0.8.2.1.jar stream_compute.py
+# ~/spark-2.3.3-bin-hadoop2.7/bin/spark-submit --conf "spark.executor.extraJavaOptions=-verbose:class"  --conf "spark.driver.extraJavaOptions=-verbose:class" --jars /extlib/spark-sql-kafka-0-10_2.11-2.3.3.jar,/extlib/kafka-clients-0.8.2.1.jar,~/extlib/spark-sql-kafka-0-10_2.11-2.3.3.jar,~/extlib/kafka-clients-0.8.2.1.jar stream_compute.py
 
 
 from pyspark.sql import SparkSession
