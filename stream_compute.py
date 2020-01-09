@@ -9,6 +9,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import explode
 from pyspark.sql.functions import split
 from pyspark.streaming.kafka import KafkaUtils
+from cassandra.cluster import Cluster
+from cassandra.query import dict_factory
 
 spark = SparkSession \
     .builder \
@@ -26,66 +28,35 @@ dsraw = spark \
 
 ds = dsraw.selectExpr("CAST(value AS STRING)")
 
-query = dsraw.writeStream \
-    .outputMode("append") \
-    .format("console") \
-    .start()    
+#query = ds.writeStream \
+#    .outputMode("append") \
+#    .format("console") \
+#    .option("truncate", "false")\
+#    .start()    
 
-# val df = dsraw.select(explode(split($"value".cast("string"), "\\s+")).as("word"))
-#   .groupBy($"word")
-#   .count
+cluster = Cluster(['127.0.0.1'])
+session = cluster.connect('goals')
+session.row_factory = dict_factory
+rows = session.execute("SELECT * FROM orders LIMIT 10")
 
+print("rowssssss : "+ str(rows[0]['items']))
 
-# display(df.select($"word", $"count"))
-# dsraw.printSchema()
-
-# dsraw.show()
-# print(dsraw)
-
-
-
-# ds.show()
-
-# ds.printSchema()
-
-# rawQuery = dsraw \
-#         .writeStream \
-#         .queryName("qraw")\
-#         .format("memory")\
-#         .start()
-
-# alertQuery = ds \
-#         .writeStream \
-#         .queryName("qalerts")\
-#         .format("memory")\
-#         .start()
-
-# alerts = spark.sql("select * from qalerts")
-# alerts.show()
-
-# # Create DataFrame representing the stream of input lines from connection to localhost:9999
-# lines = spark \
-#     .readStream \
-#     .format("socket") \
-#     .option("host", "localhost") \
-#     .option("port", 9999) \
-#     .load()
 
 # # Split the lines into words
-# words = ds.select(
-#    explode(
-#        split(ds.value, " ")
-#    ).alias("word")
-# )
+words = ds.select(
+    explode(
+        split(ds.value, " ")
+    ).alias("word")
+)
 
 # # # # Generate running word count
-# wordCounts = words.groupBy("word").count()
+wordCounts = words.groupBy("word").count()
 
-# #  # Start running the query that prints the running counts to the console
-# query = wordCounts \
-#     .writeStream \
-#     .outputMode("complete") \
-#     .format("console") \
-#     .start()
+## Start running the query that prints the running counts to the console
+query = wordCounts \
+    .writeStream \
+    .outputMode("complete") \
+    .format("console") \
+    .start()
 
 query.awaitTermination()
