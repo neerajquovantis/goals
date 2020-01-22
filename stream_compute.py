@@ -1,8 +1,8 @@
 # ~/spark-2.3.3-bin-hadoop2.7/bin/spark-submit stream_compute.py localhost 9999
 # bin/kafka-console-producer.sh --topic my-stream --broker-list 127.0.0.1:9092
-# nc -lk 9999
+# "datetime": "2019-12-30 19:04:45", "order_id": "0a1db7cb-9fda-4f93-8425-6edae003cd29", "store_id": 1, "store_name": "dominos_GK", "items": {"1_non veg taco mexicana_2": 198, "2_non veg margherita medium_1": 238}, "order_total": 436}
 # new branch goals-100
-# ~/spark-2.3.3-bin-hadoop2.7/bin/spark-submit --conf "spark.executor.extraJavaOptions=-verbose:class"  --conf "spark.driver.extraJavaOptions=-verbose:class" --jars /extlib/spark-sql-kafka-0-10_2.11-2.3.3.jar,/extlib/kafka-clients-0.8.2.1.jar,~/extlib/spark-sql-kafka-0-10_2.11-2.3.3.jar,~/extlib/kafka-clients-0.8.2.1.jar stream_compute.py | grep "Batch:" -A 10
+# ~/spark-2.4.4-bin-hadoop2.7/bin/spark-submit --conf "spark.executor.extraJavaOptions=-verbose:class"  --conf "spark.driver.extraJavaOptions=-verbose:class" --jars /home/neeraj/extlib/spark-sql-kafka-0-10_2.11-2.4.4.jar,/home/neeraj/extlib/kafka-clients-0.10.0.0.jar stream_compute.py | grep "Batch:" -A 10
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import explode
@@ -15,9 +15,7 @@ from cassandra.query import dict_factory
 from pyspark.sql.types import StructType , StringType , LongType , IntegerType, DateType, TimestampType, MapType
 
 
-#schema = StructType().add("datetime", DateType()).add("order_id", StringType()).add("store_id",IntegerType()).add("store_name",StringType()).add("items",MapType(StringType, IntegerType)).add("order_total",IntegerType())
-
-schema = StructType().add("datetime", TimestampType()).add("order_id", StringType()).add("store_id",IntegerType()).add("store_name",StringType())
+schema = StructType().add("datetime", TimestampType()).add("order_id", StringType()).add("store_id",IntegerType()).add("store_name",StringType()).add("items", MapType(StringType(), IntegerType())).add("order_total",IntegerType())
 
 spark = SparkSession \
     .builder \
@@ -50,6 +48,7 @@ query = dsraw\
     .outputMode("append") \
     .format("console") \
     .queryName("t10") \
+    .option("truncate", "false") \
     .start()
 
 query.awaitTermination()
