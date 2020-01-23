@@ -4,6 +4,9 @@
 # new branch goals-100
 # ~/spark-2.4.4-bin-hadoop2.7/bin/spark-submit --conf "spark.executor.extraJavaOptions=-verbose:class"  --conf "spark.driver.extraJavaOptions=-verbose:class" --jars /home/neeraj/extlib/spark-sql-kafka-0-10_2.11-2.4.4.jar,/home/neeraj/extlib/kafka-clients-0.10.0.0.jar stream_compute.py | grep "Batch:" -A 10
 
+import json
+import ast
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import explode
 from pyspark.sql.functions import split
@@ -28,21 +31,22 @@ dsraw = spark \
     .format("kafka") \
     .option("kafka.bootstrap.servers", "127.0.0.1:9092") \
     .option("subscribe", "my-stream") \
-    .option("startingOffsets", "earliest") \
     .load().select(from_json(col("value").cast("string"), schema).alias("parsed_values")) \
     .select(col("parsed_values.*"))
 
+def process_row(row):
+    print{}
+    cluster = Cluster(['127.0.0.1'])
+    session = cluster.connect('goals')
+    session.row_factory = dict_factory
+    _query = "INSERT INTO orders (datetime,order_id,store_id,items,order_total,store_name) values ('{datetime}',{order_id},{store_id},{items},{order_total},'{store_name}')".format(datetime=row["datetime"], order_id=row["order_id"], store_id=row["store_id"], 
+        items=ast.literal_eval(json.dumps(row["items"])), order_total=row["order_total"], store_name=row["store_name"])
+    if (row["datetime"]):
+        rows = session.execute(_query)
 
-cluster = Cluster(['127.0.0.1'])
-session = cluster.connect('goals')
-session.row_factory = dict_factory
-rows = session.execute("SELECT * FROM orders LIMIT 10")
-
-print("rowssssss : "+ str(rows[0]['items']))
-
+pre_query = dsraw.writeStream.foreach(process_row).start()
 
 ## Start running the query that prints the output
-
 query = dsraw\
     .writeStream \
     .outputMode("append") \
@@ -52,3 +56,4 @@ query = dsraw\
     .start()
 
 query.awaitTermination()
+
