@@ -18,6 +18,7 @@ from cassandra.query import dict_factory
 from pyspark.sql.types import StructType , StringType , LongType , IntegerType, DateType, TimestampType, MapType
 
 
+
 schema = StructType().add("datetime", TimestampType()).add("order_id", StringType()).add("store_id",IntegerType()).add("store_name",StringType()).add("items", MapType(StringType(), IntegerType())).add("order_total",IntegerType())
 
 spark = SparkSession \
@@ -34,8 +35,7 @@ dsraw = spark \
     .load().select(from_json(col("value").cast("string"), schema).alias("parsed_values")) \
     .select(col("parsed_values.*"))
 
-def process_row(row):
-    print{}
+def save_orders(row):
     cluster = Cluster(['127.0.0.1'])
     session = cluster.connect('goals')
     session.row_factory = dict_factory
@@ -44,7 +44,34 @@ def process_row(row):
     if (row["datetime"]):
         rows = session.execute(_query)
 
-pre_query = dsraw.writeStream.foreach(process_row).start()
+        print("get items start :::")
+        print(row)
+        if (row["datetime"]):
+            for k, v in ast.literal_eval(json.dumps(row["items"])).items():
+                print(k , v)
+                item_id_name_quantity = k.split("_")
+                item_id = item_id_name_quantity[0]
+                item_name = item_id_name_quantity[1]
+                item_quantity = item_id_name_quantity[2]
+
+                print(item_id, item_name, item_quantity)
+                _query_menu = "select goods_required, item_price from menu where item_id={item_id} allow filtering;".format(item_id=item_id)
+                rows_menu = session.execute(_query_menu)
+                for item in rows_menu:
+                    print("menu item")
+                    print(item["goods_required"])
+                    print(item["item_price"])
+
+                _query_store = "select goods from stores where store_id={store_id};".format(store_id=row["store_id"])
+                rows_store = session.execute(_query_store)
+                for item in rows_store:
+                    print("store goods")
+                    print(item["goods"])
+
+
+            print("rows by get_items")
+
+pre_query1 = dsraw.writeStream.foreach(save_orders).start()
 
 ## Start running the query that prints the output
 query = dsraw\
