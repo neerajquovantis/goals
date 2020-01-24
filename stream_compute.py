@@ -16,6 +16,7 @@ from pyspark.streaming.kafka import KafkaUtils
 from cassandra.cluster import Cluster
 from cassandra.query import dict_factory
 from pyspark.sql.types import StructType , StringType , LongType , IntegerType, DateType, TimestampType, MapType
+import uuid
 
 
 
@@ -39,20 +40,24 @@ def save_orders(row):
     cluster = Cluster(['127.0.0.1'])
     session = cluster.connect('goals')
     session.row_factory = dict_factory
-    _query = "INSERT INTO orders (datetime,order_id,store_id,items,order_total,store_name) values ('{datetime}',{order_id},{store_id},{items},{order_total},'{store_name}')".format(datetime=row["datetime"], order_id=row["order_id"], store_id=row["store_id"], 
-        items=ast.literal_eval(json.dumps(row["items"])), order_total=row["order_total"], store_name=row["store_name"])
+    _query = "INSERT INTO orders (datetime,order_id,store_id,items,order_total,store_name) values (%s,%s,%s,%s,%s,%s)"
+    print(type(row["datetime"]), type)
+    val = [row["datetime"],uuid.UUID(row["order_id"]),row["store_id"],row["items"],row["order_total"],row["store_name"]]
     if (row["datetime"]):
-        rows = session.execute(_query)
+        rows = session.execute(_query,val)
 
         print("get items start :::")
         print(row)
         if (row["datetime"]):
+            store_id = row["store_id"]
+            store_name = row["store_name"]
             for k, v in ast.literal_eval(json.dumps(row["items"])).items():
                 print(k , v)
                 item_id_name_quantity = k.split("_")
                 item_id = item_id_name_quantity[0]
                 item_name = item_id_name_quantity[1]
                 item_quantity = item_id_name_quantity[2]
+                item_total_price = v
 
                 print(item_id, item_name, item_quantity)
                 _query_menu = "select goods_required, item_price from menu where item_id={item_id} allow filtering;".format(item_id=item_id)
@@ -61,26 +66,53 @@ def save_orders(row):
                     print("menu item")
                     print(item["goods_required"])
                     print(item["item_price"])
+                    item_price = item["item_price"]
 
-                _query_store = "select goods from stores where store_id={store_id};".format(store_id=row["store_id"])
+                _query_store = "select goods from stores where store_id={store_id};".format(store_id=store_id)
                 rows_store = session.execute(_query_store)
                 for item in rows_store:
                     print("store goods")
                     print(item["goods"])
 
+                data_schema = [StructField('item_id', IntegerType(), True), StructField('item_name', StringType(), True), StructField('item_id', IntegerType(), True), StructField('item_name', StringType(), True), StructField('item_quantity', IntegerType(), True), StructField('item_price', IntegerType(), True), StructField('item_total_price', IntegerType(), True)]
+                # finaldf = spark.createDataFrame(
+                #     [(store_id, store_name, item_id, item_name, item_quantity, item_price, item_total_price),],
+                #     ['Store_Id', 'Store_Name', 'Item_Id','Item_Name', 'Item_Quantity', 'Item_Price', 'Item_Total_Price']
+                # )
+                # finaldf.show(truncate=false)
+
 
             print("rows by get_items")
 
-pre_query1 = dsraw.writeStream.foreach(save_orders).start()
+# pre_query1 = dsraw.writeStream.foreach(save_orders).start()
 
 ## Start running the query that prints the output
-query = dsraw\
+query = dsraw \
     .writeStream \
     .outputMode("append") \
     .format("console") \
     .queryName("t10") \
     .option("truncate", "false") \
     .start()
+
+# dfnew.writeStream
+#     .format("orc")        // can be "orc", "json", "csv", etc.
+#     .option("path", "/orders/flowperitem/")   
+#     .start()
+
+
+ds_processing = dsraw.select(col('order_id'), explode(col('items')).alias("item", "amount"), split("item","_").getItem(0).alias("item_id"), split("item","_").getItem(1).alias("item_name"),
+    split("item","_").getItem(2).alias("item_quantity"))
+
+
+pre_query2 = ds_processing \
+    .writeStream \
+    .outputMode("append") \
+    .format("console") \
+    .queryName("ds_processing") \
+    .option("truncate", "false") \
+    .start()
+
 
 query.awaitTermination()
 
