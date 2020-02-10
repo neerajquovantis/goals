@@ -4,21 +4,14 @@
 # new branch goals-100
 # ~/spark-2.4.4-bin-hadoop2.7/bin/spark-submit --conf "spark.executor.extraJavaOptions=-verbose:class"  --conf "spark.driver.extraJavaOptions=-verbose:class" --jars /home/neeraj/extlib/spark-sql-kafka-0-10_2.11-2.4.4.jar,/home/neeraj/extlib/kafka-clients-0.10.0.0.jar stream_compute.py | grep "Batch:" -A 10
 
-import json
 import ast
-
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import explode
-from pyspark.sql.functions import split
-from pyspark.sql.functions import from_json
-from pyspark.sql.functions import col
-from pyspark.streaming.kafka import KafkaUtils
+import json
+import uuid
 from cassandra.cluster import Cluster
 from cassandra.query import dict_factory
-from pyspark.sql.types import StructType , StringType , LongType , IntegerType, DateType, TimestampType, MapType
-import uuid
-
-
+from pyspark.sql import functions as F, SparkSession
+from pyspark.sql.functions import col, explode, from_json, split, window
+from pyspark.sql.types import IntegerType, MapType, StringType, StructType, TimestampType
 
 schema = StructType().add("datetime", TimestampType()).add("order_id", StringType()).add("store_id",IntegerType()).add("store_name",StringType()).add("items", MapType(StringType(), IntegerType())).add("order_total",IntegerType())
 
@@ -27,7 +20,7 @@ spark = SparkSession \
     .appName("StructuredNetworkWordCount") \
     .getOrCreate()
 
-
+# todo: check if we can avoid specifying the schema in spark2.4
 dsraw = spark \
     .readStream \
     .format("kafka") \
@@ -36,83 +29,99 @@ dsraw = spark \
     .load().select(from_json(col("value").cast("string"), schema).alias("parsed_values")) \
     .select(col("parsed_values.*"))
 
-def save_orders(row):
-    cluster = Cluster(['127.0.0.1'])
-    session = cluster.connect('goals')
-    session.row_factory = dict_factory
-    _query = "INSERT INTO orders (datetime,order_id,store_id,items,order_total,store_name) values (%s,%s,%s,%s,%s,%s)"
-    print(type(row["datetime"]), type)
-    val = [row["datetime"],uuid.UUID(row["order_id"]),row["store_id"],row["items"],row["order_total"],row["store_name"]]
-    if (row["datetime"]):
-        rows = session.execute(_query,val)
+class SaveOrders:
+    def open(self, partition_id, epoch_id):
+        try:
+            self.cluster = Cluster(['127.0.0.1'])
+            self.session = self.cluster.connect('goals')
+            self.session.row_factory = dict_factory
+            return True
+        except Exception as e:
+            print(e)
+            return False
 
-        print("get items start :::")
-        print(row)
+    def process(self, row):
+        _query = "INSERT INTO orders (datetime,order_id,store_id,items,order_total,store_name) values (%s,%s,%s,%s,%s,%s)"
+        print(type(row["datetime"]), type)
+        val = [row["datetime"],uuid.UUID(row["order_id"]),row["store_id"],row["items"],row["order_total"],row["store_name"]]
         if (row["datetime"]):
-            store_id = row["store_id"]
-            store_name = row["store_name"]
-            for k, v in ast.literal_eval(json.dumps(row["items"])).items():
-                print(k , v)
-                item_id_name_quantity = k.split("_")
-                item_id = item_id_name_quantity[0]
-                item_name = item_id_name_quantity[1]
-                item_quantity = item_id_name_quantity[2]
-                item_total_price = v
+            rows = self.session.execute(_query,val)
 
-                print(item_id, item_name, item_quantity)
-                _query_menu = "select goods_required, item_price from menu where item_id={item_id} allow filtering;".format(item_id=item_id)
-                rows_menu = session.execute(_query_menu)
-                for item in rows_menu:
-                    print("menu item")
-                    print(item["goods_required"])
-                    print(item["item_price"])
-                    item_price = item["item_price"]
+            print("get items start :::")
+            print(row)
+            if (row["datetime"]):
+                store_id = row["store_id"]
+                store_name = row["store_name"]
+                for k, v in ast.literal_eval(json.dumps(row["items"])).items():
+                    print(k , v)
+                    item_id_name_quantity = k.split("_")
+                    item_id = item_id_name_quantity[0]
+                    item_name = item_id_name_quantity[1]
+                    item_quantity = item_id_name_quantity[2]
+                    item_total_price = v
 
-                _query_store = "select goods from stores where store_id={store_id};".format(store_id=store_id)
-                rows_store = session.execute(_query_store)
-                for item in rows_store:
-                    print("store goods")
-                    print(item["goods"])
+                    print(item_id, item_name, item_quantity)
+                    _query_menu = "select goods_required, item_price from menu where item_id={item_id} allow filtering;".format(item_id=item_id)
+                    rows_menu = self.session.execute(_query_menu)
+                    for item in rows_menu:
+                        print("menu item")
+                        print(item["goods_required"])
+                        print(item["item_price"])
+                        item_price = item["item_price"]
 
-                data_schema = [StructField('item_id', IntegerType(), True), StructField('item_name', StringType(), True), StructField('item_id', IntegerType(), True), StructField('item_name', StringType(), True), StructField('item_quantity', IntegerType(), True), StructField('item_price', IntegerType(), True), StructField('item_total_price', IntegerType(), True)]
-                # finaldf = spark.createDataFrame(
-                #     [(store_id, store_name, item_id, item_name, item_quantity, item_price, item_total_price),],
-                #     ['Store_Id', 'Store_Name', 'Item_Id','Item_Name', 'Item_Quantity', 'Item_Price', 'Item_Total_Price']
-                # )
-                # finaldf.show(truncate=false)
+                    _query_store = "select goods from stores where store_id={store_id};".format(store_id=store_id)
+                    rows_store = self.session.execute(_query_store)
+                    for item in rows_store:
+                        print("store goods")
+                        print(item["goods"])
+                print("rows by get_items")
+
+    def close(self, error):
+        pass
+
+def prepare_write_to_hdfs(df):
+    ds_processing = df.select(col('datetime'), col('order_id'), col('store_id'), col('store_name'), explode(col('items')).alias("item", "amount"), split("item","_").getItem(0).alias("item_id"), split("item","_").getItem(1).alias("item_name"),
+        split("item","_").getItem(2).cast(IntegerType()).alias("item_quantity"))
+
+    ds_processing_1 = ds_processing.withWatermark("datetime", "60 minutes").groupBy(
+        window(col("datetime"), "60 minutes", "60 minutes").alias("datetime_range"),
+        col("item_name"), col("store_name"), col("store_id")
+    ).agg(F.min(col("amount")).alias("min_amount"),F.max(col("amount")).alias("max_amount"),F.avg(col("amount")).alias("avg_amount"),F.sum(col("amount")).alias("amount_sum"),F.sum(col("item_quantity")).alias("item_quantity_sum"))
+
+    ds_processing_hour_generated = ds_processing_1.withColumn("hour_generated", F.from_unixtime(F.unix_timestamp(ds_processing_1.datetime_range.getItem('start')), "yyyyMMddhh"))
+    return ds_processing_hour_generated
 
 
-            print("rows by get_items")
-
-# pre_query1 = dsraw.writeStream.foreach(save_orders).start()
-
-## Start running the query that prints the output
-query = dsraw \
+query_save_order = dsraw.writeStream.foreach(SaveOrders()).start()
+query_write_to_hdfs = prepare_write_to_hdfs(dsraw) \
     .writeStream \
     .outputMode("append") \
-    .format("console") \
-    .queryName("t10") \
-    .option("truncate", "false") \
+    .format("orc") \
+    .option("path", "/orders/flowperitem/orc") \
+    .option("checkpointLocation", "/orders/flowperitem/checkpoint") \
+    .partitionBy("hour_generated") \
     .start()
 
-# dfnew.writeStream
-#     .format("orc")        // can be "orc", "json", "csv", etc.
-#     .option("path", "/orders/flowperitem/")   
+# print("schema_ds_processing")
+# print(ds_processing.printSchema())
+
+## Start running the query that prints the output
+# query = dsraw \
+#     .writeStream \
+#     .outputMode("append") \
+#     .format("console") \
+#     .queryName("t10") \
+#     .option("truncate", "false") \
+#     .start()
+
+# pre_query2 = ds_processing_hour_generated \
+#     .writeStream \
+#     .outputMode("complete") \
+#     .format("console") \
+#     .queryName("ds_processing") \
+#     .option("truncate", "false") \
 #     .start()
 
 
-ds_processing = dsraw.select(col('order_id'), explode(col('items')).alias("item", "amount"), split("item","_").getItem(0).alias("item_id"), split("item","_").getItem(1).alias("item_name"),
-    split("item","_").getItem(2).alias("item_quantity"))
-
-
-pre_query2 = ds_processing \
-    .writeStream \
-    .outputMode("append") \
-    .format("console") \
-    .queryName("ds_processing") \
-    .option("truncate", "false") \
-    .start()
-
-
-query.awaitTermination()
+query_write_to_hdfs.awaitTermination()
 
