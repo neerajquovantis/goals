@@ -83,7 +83,7 @@ def prepare_write_to_hdfs(df):
     ds_processing = df.select(col('datetime'), col('order_id'), col('store_id'), col('store_name'), explode(col('items')).alias("item", "amount"), split("item","_").getItem(0).alias("item_id"), split("item","_").getItem(1).alias("item_name"),
         split("item","_").getItem(2).cast(IntegerType()).alias("item_quantity"))
 
-    ds_processing_1 = ds_processing.withWatermark("datetime", "60 minutes").groupBy(
+    ds_processing_1 = ds_processing.withWatermark("datetime", "5 minutes").groupBy(
         window(col("datetime"), "60 minutes", "60 minutes").alias("datetime_range"),
         col("item_name"), col("store_name"), col("store_id")
     ).agg(F.min(col("amount")).alias("min_amount"),F.max(col("amount")).alias("max_amount"),F.avg(col("amount")).alias("avg_amount"),F.sum(col("amount")).alias("amount_sum"),F.sum(col("item_quantity")).alias("item_quantity_sum"))
