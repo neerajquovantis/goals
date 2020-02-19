@@ -25,8 +25,8 @@ def create_kafka_producer():
 	
 def send_to_kafka():
 	topicName,producer = create_kafka_producer()
-	for i in range(1,10000):
-		time.sleep(randint(1,10)/10)
+	for i in range(1,100000000):
+		time.sleep(randint(1,2))
 		store = random.choice(stores).split('_')
 		store_id = int(store[0])
 		store_name = '_'.join(store[1:])
